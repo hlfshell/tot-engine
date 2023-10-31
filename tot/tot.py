@@ -17,6 +17,16 @@ COMPLETED = "completed"
 
 
 class TreeOfThoughts(ABC):
+    """
+    TreeOfThoughts is an object that is prepared to act as an reusable ToT
+    prompting engine for a particular problem set. It is configured with a
+    set of prompts, evaluation categories, and configuration settings to
+    try to derive the desired output from the given LLM provider.
+
+
+
+    """
+
     def __init__(
         self,
         provider: Provider,
@@ -28,15 +38,32 @@ class TreeOfThoughts(ABC):
         next_step_fanout: int = 0,
         max_time: Optional[float] = None,
         max_steps: Optional[int] = None,
+        max_workers: int = 5,
     ) -> None:
         """
-        TreeOfThoughts is an object that is prepared to act as an reusable ToT
-        prompting engine for a particular problem set. It is configured with a
-        set of prompts, evaluation categories, and configuration settings to
-        try to derive the desired output from the given LLM provider.
-
-
-
+        provider - An LLM provider
+        searcher - Node search algorithm
+        evaluation_valid_or_invalid - If True, the evaluation categories are
+            limited to VALID, INVALID, and COMPLETED.
+        evaluation_categories - A list of strings that are the categories the
+            rating LLM may utilize. Only used if evaluation_valid_or_invalid
+            is set to False. Required if evaluation_valid_or_invalid is set
+            to False.
+        evaluation_category_scores - Optional - a list of floats that are the
+            scores associated with same-indexed categories in
+            evaluation_categories. If not provided, the categories are evenly
+            spaced scores from 0.0 to 1.0.
+        temperature - The temperature to use when prompting the LLM
+        next_step_fanout - The number of threads to use when prompting the LLM
+            to generate children nodes. If set to <= 0, then it is assumed that
+            when generating next nodes the LLM is generating multiple instead
+            of a singular node.
+        max_time - Optional - The maximum time in second to run the ToT engine
+            when `execute` is called. If not provided, no timeout is utilized.
+        max_steps - Optional - The maximum number of step attempts to generate
+            when running execute. If set to None, no limit is utilized.
+        max_workers - The maximum number of workers to use in the threadpool
+            for asynchronous operations.
         """
         self.provider = provider
         self.searcher = searcher
@@ -46,6 +73,7 @@ class TreeOfThoughts(ABC):
         self._next_step_fanout = next_step_fanout
         self.max_time = max_time
         self.max_steps = max_steps
+        self.max_workers = max_workers
         self._per_step_timeout = 10.0
         self.total_timeout = 60.0
 
@@ -75,7 +103,7 @@ class TreeOfThoughts(ABC):
                 label.lower() for label in evaluation_categories
             ]
 
-        self.llm_threadpool = ThreadPoolExecutor(max_workers=5)
+        self.llm_threadpool = ThreadPoolExecutor(max_workers=max_workers)
 
     @abstractmethod
     def generate_node_prompt(self, steps: List[Node]) -> str:
@@ -342,13 +370,13 @@ class TreeOfThoughts(ABC):
 
     def execute(self, task: str) -> Node:
         """
-        execute runs the tree of thoughts engine
-        as configured, producing (hopefully) a
-        chain of thoughts in the form of a ThoughtTree
-        and an answer.
+        execute runs the tree of thoughts engine as configured,
+        producing (hopefully) a complete chain of thoughts via
+        our Node class providing an answer to the question.
         """
         stop = False
         started_at = time()
+        steps = 0
 
         root_thought = Node()
         current_thought: Union[Node, None] = None
@@ -356,9 +384,15 @@ class TreeOfThoughts(ABC):
         # Until we trigger a stop condition, we keep expanding
         # upon the tree of thoughts
         while not stop:
+            # Check to see if we're taking too long to
+            # generate our results; if so, break.
             if time() - started_at > self.total_timeout:
                 stop = True
                 break
+            elif steps >= self.max_steps:
+                stop = True
+                break
+            steps += 1
 
             # Pick the next target node to expand upon.
             # If it's the first time we're doing this, start
