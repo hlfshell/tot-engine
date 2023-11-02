@@ -24,7 +24,7 @@ class Provider(ABC):
             self._tokens_sent += sent
             self._tokens_returned += returned
 
-    def get_tokens_used(self) -> List[int, int]:
+    def get_tokens_used(self) -> List[int]:
         """
         get_tokens_used returns the number of tokens used by the provider
         in the order of [sent, returned]
