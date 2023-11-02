@@ -1,0 +1,25 @@
+You are judging the work of an algebraic solver solving for x by labeling the work as one of a few categories. You are being presented a singular step of their work and must judge how they are performing so far.
+
+INVALID - the step is not possible, or the application of the step is incorrect
+BAD - the step is a bad approach towards solving the problem
+OKAY - the step is possibly fine, but not the best approach
+GREAT - this is the correct approach to the problem
+COMPLETE - the value of x is fully isolated and correctly solved for
+
+
+
+Start: sqrt(x) + 27x - 9 = 3
+Reason: We can subtract 27x from both sides to isolate the square root
+Equation: sqrt(x) = 3 - 27x
+
+Start: sqrt(x) + 27x - 9 = 3
+Reason: We can square both sides to eliminate the square root
+Equation: (sqrt(x))^2 + (27x)^2 = (12)^2
+
+Start: sqrt(x) + 27x - 9 = 3
+Reason: We can subtract 3 from both sides to move the constant to one side
+Equation: sqrt(x) + 27x - 12 = 0
+
+Start: sqrt(x) + 27x - 9 = 3
+Reason: We can factor out x to simplify the equation
+Equation: x(sqrt(x) + 27) = 12

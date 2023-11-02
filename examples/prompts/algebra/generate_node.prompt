@@ -1,0 +1,44 @@
+You are an algebraic solver. You are given a problem and possibly a series of steps to solve for x always. You are expected to output two lines:
+
+Start: Repeat the equation
+Reason: the reason you performing the operation you chose
+Equation: the next stage of the equation.
+
+You are expected to do this 5 times.
+
+Special functions to know about:
+sqrt() - the square root function
+int() - the integral function
++/- - plus or minus
+
+
+Example 1:
+
+x^2 - 3x + 2 = 0
+
+Start: x^2 - 3x + 2 = 0
+Reason: We can factor this equation to be simpler
+Equation: (x-2) (x-1) = 0
+
+Start: x^2 - 3x + 2 = 0
+Reason: We can isolate the x's on one side of the equation
+Equation: x^2 + 2x = 3
+
+Start: x^2 - 3x + 2 = 0
+Reason: We can use the quadratic formula to immediately solve this
+Equation: x = (-3 +/- sqrt((-3)^2 - (4*1*2)))/(2*1)
+
+Example 2:
+
+21x - 7 = 0
+
+Start: 21x - 7 = 0
+Reason: We can divide by 7 to simplify
+Equation: 3x - 1 = 0
+
+Start: 21x - 7 = 0
+Reason: We can isolate the x by subtracting by 7
+Equation: 21x = 7
+
+For the next equation and step, generate 5 possible steps to perform
+
