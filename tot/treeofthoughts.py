@@ -141,10 +141,10 @@ class TreeOfThoughts(ABC):
         pass
 
     @abstractmethod
-    def evaluate_step_prompt(self, step: Node) -> str:
+    def evaluate_node_prompt(self, step: Node) -> str:
         """
-        evaluate_step_prompt takes a generated step and returns
-        a new prompt that is used to ask the LLM to rate the step
+        evaluate_node_prompt takes a generated step and returns
+        a new prompt that is used to ask the LLM to rate the node
         based on a set of predetermined categorical labels.
 
         Must be defined by the implementing class.
@@ -205,7 +205,7 @@ class TreeOfThoughts(ABC):
         flag on the node, regardless if it is an included category
         in the assigned labels.
         """
-        rating_prompt = self.evaluate_step_prompt(node.result)
+        rating_prompt = self.evaluate_node_prompt(node.result)
         rating_response = self.prompt(rating_prompt)
         label = self.parse_evaluation_response(rating_response)
         label = label.lower()
