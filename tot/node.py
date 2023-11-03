@@ -190,3 +190,12 @@ class Node:
             """
 
         return html
+
+    def save_html(self, path: str):
+        """
+        save_html will save the html representation of the node
+        to the given path.
+        """
+        with open(path, "w") as f:
+            f.write(self.html())
+            f.close()
