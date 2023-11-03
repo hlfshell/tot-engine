@@ -72,8 +72,8 @@ class TreeOfThoughts(ABC):
         self._temperature = temperature
         self._next_step_fanout = next_step_fanout
         self.max_time = max_time
-        self.max_steps = max_steps
-        self.max_workers = max_workers
+        self._max_steps = max_steps
+        self._max_workers = max_workers
         self._per_step_timeout = 10.0
         self.total_timeout = 60.0
 
@@ -103,10 +103,8 @@ class TreeOfThoughts(ABC):
                 label.lower() for label in evaluation_categories
             ]
 
-        self.llm_threadpool = ThreadPoolExecutor(max_workers=max_workers)
-
     @abstractmethod
-    def generate_node_prompt(self, steps: List[Node]) -> str:
+    def generate_node_prompt(self, nodes: List[Node]) -> str:
         """
         generate_node_prompt takes the existing produced steps and
         returns a new prompt that is used to ask the LLM for the
@@ -141,11 +139,13 @@ class TreeOfThoughts(ABC):
         pass
 
     @abstractmethod
-    def evaluate_node_prompt(self, step: Node) -> str:
+    def evaluate_node_prompt(self, nodes: List[Node]) -> str:
         """
-        evaluate_node_prompt takes a generated step and returns
-        a new prompt that is used to ask the LLM to rate the node
-        based on a set of predetermined categorical labels.
+        evaluate_node_prompt takes a chain of nodes (isolated and
+        linear from the root node to currently targeted node to
+        evaluate) and returns a new prompt that is used to ask the
+        LLM to rate the node based on a set of predetermined
+        categorical labels.
 
         Must be defined by the implementing class.
         """
@@ -260,7 +260,7 @@ class TreeOfThoughts(ABC):
         node in the same order. If an exception is thrown the
         rating will be 0.0.
         """
-        with self.llm_threadpool as executor:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures: List[Future] = []
             for node in nodes:
                 future = executor.submit(self.rate_node, node)
@@ -281,16 +281,19 @@ class TreeOfThoughts(ABC):
 
             return scores
 
-    def generate_children_nodes(self, node: Node) -> List[Node]:
+    def generate_children_nodes(self, nodes: List[Node]) -> List[Node]:
         """
         generate_children_nodes will generate numerous children nodes
-        (as per the `_next_step_fanout` setting) for a given node. It
-        accomplishes this by asking the ToT engine to generate a prompt
-        to generate the children nodes via `generate_step_prompt`. It
-        then parses the response from the LLM via the
-        `parse_generation_response`
+        (as per the `_next_step_fanout` setting) for a given node chain.
+        The node chain is assumed to be linear - parent node to the
+        current child node we are building off of. It accomplishes this by
+        asking the ToT engine to generate a prompt to generate the children
+        nodes via `generate_step_prompt`. It then parses the response from
+        the LLM via the `parse_generation_response`
         """
-        prompt = self.generate_node_prompt(node)
+        print("Generating for")
+        print(nodes[-1].result)
+        prompt = self.generate_node_prompt(nodes)
 
         # We need to determine if we're going to fan out or utilize
         # a singular prompt generating steps.
@@ -300,7 +303,7 @@ class TreeOfThoughts(ABC):
             return nodes
         else:
             nodes = []
-            with self.llm_threadpool as executor:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                 futures: List[Future] = []
                 for _ in range(0, self._next_step_fanout):
                     future = executor.submit(self.prompt, prompt)
@@ -336,7 +339,7 @@ class TreeOfThoughts(ABC):
         if times == -1:
             times = self._next_step_fanout
 
-        with self.llm_threadpool as executor:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures: List[Future] = []
             for _ in range(0, times):
                 future = executor.submit(self.prompt, prompt)
@@ -366,9 +369,9 @@ class TreeOfThoughts(ABC):
         prompt will trigger a network call to the llm provider with a
         built in retry mechanism
         """
-        return self.provider.prompt(prompt, self.temperature)
+        return self.provider.prompt(prompt, self._temperature)
 
-    def execute(self, task: str) -> Node:
+    def execute(self, root_node: Node) -> Node:
         """
         execute runs the tree of thoughts engine as configured,
         producing (hopefully) a complete chain of thoughts via
@@ -378,7 +381,6 @@ class TreeOfThoughts(ABC):
         started_at = time()
         steps = 0
 
-        root_thought = Node()
         current_thought: Union[Node, None] = None
 
         # Until we trigger a stop condition, we keep expanding
@@ -389,7 +391,8 @@ class TreeOfThoughts(ABC):
             if time() - started_at > self.total_timeout:
                 stop = True
                 break
-            elif steps >= self.max_steps:
+            # Max steps are only checked if it's not None
+            elif self._max_steps is not None and steps >= self._max_steps:
                 stop = True
                 break
             steps += 1
@@ -397,10 +400,10 @@ class TreeOfThoughts(ABC):
             # Pick the next target node to expand upon.
             # If it's the first time we're doing this, start
             # with the root node. Otherwise, use the searcher
-            if len(root_thought.children) == 0:
-                current_thought = root_thought
+            if len(root_node.children) == 0:
+                current_thought = root_node
             else:
-                current_thought = self.searcher.next(root_thought)
+                current_thought = self.searcher.next(root_node)
                 # If the searcher returns None, we do not have
                 # a valid path forward and we abort.
                 if current_thought is None:
@@ -409,7 +412,8 @@ class TreeOfThoughts(ABC):
 
             # Now that we have the next target thought, let's
             # generate the next set of nodes off of this thought
-            nodes = self.generate_children_nodes(current_thought)
+            current_thought_chain = root_node.isolate_chain(current_thought)
+            nodes = self.generate_children_nodes(current_thought_chain)
 
             # Set the nodes as children to the current_thought node
             current_thought.children = nodes
@@ -422,6 +426,6 @@ class TreeOfThoughts(ABC):
             for node in nodes:
                 if node.completed:
                     stop = True
-                    root_thought.mark_completed(node)
+                    root_node.mark_completed(node)
 
-        return root_thought
+        return root_node
