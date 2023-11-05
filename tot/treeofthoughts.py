@@ -205,7 +205,10 @@ class TreeOfThoughts(ABC):
         flag on the node, regardless if it is an included category
         in the assigned labels.
         """
-        rating_prompt = self.evaluate_node_prompt(node.result)
+        # Get the chain from parent node to this node
+        node_chain = node.isolate_chain()
+
+        rating_prompt = self.evaluate_node_prompt(node_chain)
         rating_response = self.prompt(rating_prompt)
         label = self.parse_evaluation_response(rating_response)
         label = label.lower()
@@ -242,7 +245,7 @@ class TreeOfThoughts(ABC):
                 node.invalid = True
                 score = 0.0
             elif label == COMPLETED:
-                node.completed = True
+                node.mark_completed()
                 score = self.evaluate_category_scores[-1]
 
             # Map the score to the label
@@ -254,7 +257,7 @@ class TreeOfThoughts(ABC):
 
     def rate_nodes(self, nodes: List[Node]) -> List[float]:
         """
-        rate_nodes will, for a given list of nodes, asychronously
+        rate_nodes will, for a given list of nodes, asynchronously
         call `rate_node` for each one given the ToT engine's
         threadpool. It will return a list of the scores for each
         node in the same order. If an exception is thrown the
@@ -281,18 +284,18 @@ class TreeOfThoughts(ABC):
 
             return scores
 
-    def generate_children_nodes(self, nodes: List[Node]) -> List[Node]:
+    def generate_children_nodes(self, node: Node) -> List[Node]:
         """
         generate_children_nodes will generate numerous children nodes
-        (as per the `_next_step_fanout` setting) for a given node chain.
-        The node chain is assumed to be linear - parent node to the
-        current child node we are building off of. It accomplishes this by
-        asking the ToT engine to generate a prompt to generate the children
-        nodes via `generate_step_prompt`. It then parses the response from
-        the LLM via the `parse_generation_response`
+        (as per the `_next_step_fanout` setting) for a given node. It
+        accomplishes this by asking the ToT engine to generate a prompt
+        to generate the children nodes via `generate_step_prompt`. It
+        then parses the response from the LLM via the
+        `parse_generation_response`
         """
         print("Generating for")
-        print(nodes[-1].result)
+        print(node.result, node.reason)
+        nodes = node.isolate_chain()
         prompt = self.generate_node_prompt(nodes)
 
         # We need to determine if we're going to fan out or utilize
@@ -381,7 +384,7 @@ class TreeOfThoughts(ABC):
         started_at = time()
         steps = 0
 
-        current_thought: Union[Node, None] = None
+        current_node: Union[Node, None] = None
 
         # Until we trigger a stop condition, we keep expanding
         # upon the tree of thoughts
@@ -401,22 +404,21 @@ class TreeOfThoughts(ABC):
             # If it's the first time we're doing this, start
             # with the root node. Otherwise, use the searcher
             if len(root_node.children) == 0:
-                current_thought = root_node
+                current_node = root_node
             else:
-                current_thought = self.searcher.next(root_node)
+                current_node = self.searcher.next(root_node)
                 # If the searcher returns None, we do not have
                 # a valid path forward and we abort.
-                if current_thought is None:
+                if current_node is None:
                     stop = True
                     break
 
             # Now that we have the next target thought, let's
             # generate the next set of nodes off of this thought
-            current_thought_chain = root_node.isolate_chain(current_thought)
-            nodes = self.generate_children_nodes(current_thought_chain)
+            nodes = self.generate_children_nodes(current_node)
 
             # Set the nodes as children to the current_thought node
-            current_thought.children = nodes
+            current_node.children = nodes
 
             # Rate each node
             self.rate_nodes(nodes)
