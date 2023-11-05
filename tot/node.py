@@ -35,23 +35,27 @@ class Node:
         self,
         result: str,
         reason: str = "",
+        parent: Optional[Node] = None,
         children: List[Node] = [],
-        rating: Optional[float] = None,
+        rating: float = 0.0,
         completed: bool = False,
         invalid: bool = False,
     ):
         self._id = uuid4()
         self.result = result
         self.reason = reason
-        self.children = children
         self.rating = rating
         self.completed = completed
         self.invalid = invalid
+
+        self.parent = parent
+        self.children = children
 
     def clone(self) -> Node:
         clone = Node(
             self.result,
             self.reason,
+            self.parent,
             [child.clone() for child in self.children],
             self.rating,
             self.completed,
@@ -60,20 +64,16 @@ class Node:
         clone._id = self._id
         return clone
 
-    def mark_completed(self, node: Node):
+    def mark_completed(self):
         """
-        mark_completed will mark the target node and all parent
-        nodes as completed if the child is contained within the
-        given parent node.
+        mark_completed will mark this node and all parent nodes as
+        completed
         """
-        chain = self.isolate_chain(node)
-        if len(chain) == 0:
-            raise ValueError("Node not found in chain")
+        if self.parent is not None:
+            self.parent.mark_completed()
+        self.completed = True
 
-        for node in chain:
-            node.completed = True
-
-    def isolate_chain(self, node: Node) -> List[Node]:
+    def isolate_chain(self) -> List[Node]:
         """
         isolate_chain will return the chain of nodes to the desired
         node/node id as a list in order of their branching. If the
@@ -81,36 +81,22 @@ class Node:
         included. Note that these are references to the original
         nodes, so that changes to these will affect the originals.
         """
-        nodes = []
+        if self.parent is None:
+            return [self]
+        else:
+            return self.parent.isolate_chain() + [self]
 
-        # First, we handle the case that this *is* the target node
-        if self._id == node._id:
-            nodes.append(self)
-            return nodes
-
-        # Then we go hunting for the node in question amongst our
-        # children nodes
-        for child in self.children:
-            child_nodes = child.isolate_chain(node)
-            if len(child_nodes) > 0:
-                nodes.append(self)
-                nodes += child_nodes
-                return nodes
-
-        # Finally, complete failure - this is a dead end
-        return []
-
-    def isolate_completed_chains(self) -> Node:
+    def isolate_completed_chains(self) -> List[Node]:
         """
         isolate_completed_chains will return a list of all
-        completed chains within the given node, assuming
-        that an exist. Note that this assumes that you've
-        ran mark_completed on the parent node to mark nodes
-        complete. This function is useful if the ToT engine
-        is allowed to reach multiple possible completed
-        states, allowing. Nodes are repeated via clone(),
-        and can be represented multiple times depending on
-        the branching of the completed paths.
+        completed chains within the given node and their
+        children, assuming that they exist. Note that this
+        assumes that you've ran mark_completed on the parent
+        node to mark nodes complete. This function is useful
+        if the ToT engine is allowed to reach multiple possible
+        completed states, allowing. Nodes are repeated via
+        clone(), and can be represented multiple times depending
+        on the branching of the completed paths.
         """
         if not self.completed:
             return []
@@ -128,24 +114,16 @@ class Node:
 
         return completed_chains
 
-    def find(self, id: str) -> Union[Node, None]:
-        """
-        find returns the node with given id if it exists
-        within any possible chain of nodes from this node;
-        it returns None otherwise
-        """
-        if self._id == id:
-            return self
-        for child in self.children:
-            found = child.find(id)
-            if found is not None:
-                return found
-        return None
-
     def __eq__(self, __value: object) -> bool:
         if __value is None:
             return False
         return self._id == __value._id
+
+    def __lt__(self, __value: object) -> bool:
+        if __value is None:
+            return False
+
+        return self.rating < __value.rating
 
     def html(self, wrap_in_html: bool = True) -> str:
         """
