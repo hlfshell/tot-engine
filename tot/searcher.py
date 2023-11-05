@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from queue import PriorityQueue
 from typing import Union
 
 from tot.node import Node
@@ -71,3 +72,43 @@ class BFS(Searcher):
             return None
 
         return self.queue.pop(0)
+
+
+class Dijkstra(Searcher):
+    def __init__(self, depth_penalty: float = 0.0) -> None:
+        super().__init__()
+
+        self.depth_penalty = depth_penalty
+        self.queue = PriorityQueue()
+
+    def _add_to_queue(self, node: Node, depth: int = 0) -> None:
+        if node.invalid or node.completed:
+            return
+
+        if len(node.children) == 0:
+            # Calculate score with decay factored in from
+            # our depth penalty. Note that we take the -1
+            # as PriorityQueue looks at the lowest value
+            # and we score for the highest value.
+            rating = node.rating
+            if rating is None:
+                rating = 0
+            score = -1 * rating * (self.depth_penalty * depth)
+            self.queue.put((score, node))
+            return
+
+        for child in node.children:
+            self._add_to_queue(child, depth=depth + 1)
+
+    def next(self, parent_node: Node) -> Node | None:
+        """ """
+        # Reset our queue
+        self.queue = PriorityQueue()
+
+        self._add_to_queue(parent_node)
+
+        if self.queue.empty():
+            return None
+
+        item = self.queue.get()
+        return item[1]
