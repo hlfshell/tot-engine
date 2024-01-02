@@ -26,15 +26,13 @@ class OpenAI(Provider):
             self.model = model
 
     def prompt(self, prompt: str, temperature: float) -> str:
-        response = openai.Completion.create(
-            model=self.model, temperature=temperature, prompt=prompt, max_tokens=1024
+        response = openai.ChatCompletion.create(
+            model=self.model,
+            temperature=temperature,
+            messages=[{"role": "system", "content": prompt}],
         )
 
-        self.increment_tokens(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
-
-        return response.choices[0].text
+        return response.choices[0].message.content
 
 
 class PaLM(Provider):

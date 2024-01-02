@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import List
+from typing import Tuple
 
 
 class Provider(ABC):
@@ -24,13 +24,13 @@ class Provider(ABC):
             self._tokens_sent += sent
             self._tokens_returned += returned
 
-    def get_tokens_used(self) -> List[int]:
+    def get_tokens_used(self) -> Tuple[int]:
         """
         get_tokens_used returns the number of tokens used by the provider
-        in the order of [sent, returned]
+        in the order of (sent, returned)
         """
         with self._tokens_lock:
-            return [self._tokens_sent, self._tokens_returned]
+            return (self._tokens_sent, self._tokens_returned)
 
     def reset_tokens_used(self):
         """
